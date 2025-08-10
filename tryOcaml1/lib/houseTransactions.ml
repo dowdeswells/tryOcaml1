@@ -40,10 +40,11 @@ let calcOutgoings (acc:transactionAccumulator) (d:date):transactionAccumulator =
 
 let calcInterest (acc:transactionAccumulator) (d:date):transactionAccumulator =
   let amount = 
-    if acc.balance >= 0.0 
+    if acc.balance <= 0.0 
     then 0.0 
     else acc.accrewedInterest +. acc.dailyInterestRate *. acc.balance in
 
+  (* Printf.sprintf "Daily interest rate %f" amount |> print_endline;  *)
   if (TD.day d) = (TD.day acc.house.settlementDate) && not (TD.equal d acc.house.settlementDate)
     then 
       applyTransaction {acc with accrewedInterest=0.0;} {date=d; amount=amount; desc="Interest"}
@@ -57,10 +58,7 @@ let calcRent (acc:transactionAccumulator) (d:date):transactionAccumulator =
     then applyTransaction acc {date=d; amount=acc.house.weeklyRent; desc="Rent"}
     else acc  
 
-let calcAll (acc:transactionAccumulator) (d:date):transactionAccumulator =
-  let acc' = calcRent acc d in
-  let acc'' = calcOutgoings acc' d in
-  calcInterest acc'' d
+
 
 let rec days_from (n : date) : date_seq = fun () -> Seq.Cons (n, days_from (TD.add ~days:1 n))
 
@@ -68,6 +66,30 @@ let days_range (start:date) (endDate:date) =
   days_from start
   |> Seq.take_while (fun a -> TD.le a endDate)
 
+
+
+(* let calcAllAccum acc (d:date) (fs:'a list) = 
+  fs |> List.fold_left (fun acc f -> f acc d) acc
+
+let calcAll4 (acc:transactionAccumulator) (d:date):transactionAccumulator =
+  let fs = [calcRent; calcOutgoings; calcInterest] in
+  calcAllAccum acc d fs *)
+
+
+(* let calcAll3 (acc:transactionAccumulator) (d:date):transactionAccumulator =
+  let rec calcForAllFunctions (acc, (d:date)) (fs:'a list) =
+    match fs with
+    | [] -> acc
+    | h::rest -> let acc' = h acc d in calcForAllFunctions (acc', d) rest
+  and fs = [calcRent; calcOutgoings; calcInterest] in
+  calcForAllFunctions (acc, d) fs *)
+
+
+
+let calcOneDay (acc:transactionAccumulator) (d:date):transactionAccumulator =
+  let calcAllAccum acc (d:date) (fs:'a list) = List.fold_left (fun acc f -> f acc d) acc fs
+  and fs = [calcRent; calcOutgoings; calcInterest] in
+  calcAllAccum acc d fs
 
 let makeTransactions (house:HT.housePriceInput):transactionAccumulator =
   let acc={
@@ -78,8 +100,29 @@ let makeTransactions (house:HT.housePriceInput):transactionAccumulator =
     transactions = [{date=house.settlementDate; amount= -. house.buyPrice; desc="Buy property"}];
     } 
   and days = days_range house.settlementDate house.saleDate in
+  
+  let acc' = days |> Seq.fold_left calcOneDay acc  in
+  applyTransaction acc' {date=house.saleDate; amount=house.sellPrice; desc="Sell Property"}  
+
+
+(* 
+
+let makeTransactions (house:HT.housePriceInput):transactionAccumulator =
+  let acc={
+    house=house;  
+    dailyInterestRate=house.interestRate /. (365.0 *. 100.0);
+    accrewedInterest=0.0;
+    balance=0.0 -. house.loanAmount;
+    transactions = [{date=house.settlementDate; amount= -. house.buyPrice; desc="Buy property"}];
+    } 
+  and days = days_range house.settlementDate house.saleDate
+  and calcAll (acc:transactionAccumulator) (d:date):transactionAccumulator =
+    let acc' = calcRent acc d in
+    let acc'' = calcOutgoings acc' d in
+    calcInterest acc'' d
+  in 
   let acc' = Seq.fold_left calcAll acc days in
-  applyTransaction acc' {date=house.saleDate; amount=house.sellPrice; desc="Sell Property"}
+    applyTransaction acc' {date=house.saleDate; amount=house.sellPrice; desc="Sell Property"}
   
 
-
+ *)
