@@ -1,0 +1,3 @@
+(library
+ (name tryOcaml1)
+ (libraries timedesc ))
