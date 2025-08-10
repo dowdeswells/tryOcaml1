@@ -1,5 +1,6 @@
 module M = TryOcaml1.HouseTransactions 
 module HT = TryOcaml1.HouseTypes
+module X = TryOcaml1.Xirr
 
 (* open TryOcaml1.House *)
 let exampleHousePriceInput = HT.{
@@ -68,9 +69,37 @@ let print_all2 () =
     (List.hd interestPayments);
   Alcotest.(check (Alcotest.float epsilon_float)) "balance" 100500.0  (acc.balance)
 
+let convertDate (d:Timedesc.Date.t):Timedesc.t =
+  Timedesc.of_date_and_time d (Timedesc.Time.make_exn ~hour:0 ~minute:0 ~second:0 ()) ~tz:Timedesc.Time_zone.utc
+  |> Result.get_ok
+
+let to_cashFlow (t:HT.transaction):X.cash_flow = {date=(convertDate t.date); amount=t.amount}
+
+
+let calc_xirr () = 
+ let settlementDate = (M.TD.Ymd.make ~year:2025 ~month:1 ~day:1) |> Result.get_ok in
+  let a = HT.{
+    buyPrice = 500000.0;
+    loanAmount = 100000.0;
+    interestRate = 7.50;
+    sellPrice = 600000.0;
+    settlementDate = settlementDate;
+    saleDate = (TD.Ymd.make ~year:2035 ~month:1 ~day:1) |> Result.get_ok;
+    weeklyRent = 500.0;
+    monthlyOutgoings = 500.0;
+  } in
+  let acc = (applyAll a) in 
+  let cashFlows = List.map to_cashFlow acc.transactions in
+  let r = TryOcaml1.Xirr.xirr cashFlows in
+  (match r with
+  | Some xirr ->  Printf.sprintf "XIRR: %f" xirr
+  | None -> "Didnt work")
+  |> print_endline
+
 
 
 let houseTests = [
   Alcotest.test_case "Show Interest Payments" `Quick print_all2;
   Alcotest.test_case "Print Int 2 Digits" `Quick print_all;
+  Alcotest.test_case "Print Xirr" `Quick calc_xirr;
 ] 
